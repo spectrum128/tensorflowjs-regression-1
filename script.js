@@ -1,5 +1,5 @@
 const batchSize = 32;
-const epochs = 80;
+const epochs = 50;
 
 /**
  * Get the car data reduced to just the variables we are interested
@@ -10,9 +10,10 @@ async function getData() {
     const carsData = await carsDataReq.json();  
     const cleaned = carsData.map(car => ({
       mpg: car.Miles_per_Gallon,
+      weight: car.Weight_in_lbs,
       horsepower: car.Horsepower,
     }))
-    .filter(car => (car.mpg != null && car.horsepower != null));
+    .filter(car => (car.mpg != null && car.horsepower != null && car.weight != null));
     
     return cleaned;
   }
@@ -25,8 +26,9 @@ async function getData() {
     // Create a sequential model
     const model = tf.sequential(); 
 
+    
     // Add a single input layer
-    model.add(tf.layers.dense({inputShape: [1], units: 1, useBias: true}));
+    model.add(tf.layers.dense({inputShape: [2], units: 1, useBias: true}));
 
     // model.add(tf.layers.dense({units: 100, activation: 'sigmoid'}));
     
@@ -54,10 +56,12 @@ function convertToTensor(data) {
   
       // Step 2. Convert data to Tensor
       //const inputs = data.map(d => d.horsepower)
-      const inputs = data.map( d => d.horsepower);
+      const inputs = data.map( d => { 
+          return [d.horsepower, d.weight]
+      })
       const labels = data.map(d => d.mpg);
   
-      const inputTensor = tf.tensor2d(inputs, [inputs.length, 1]);
+      const inputTensor = tf.tensor2d(inputs, [inputs.length, inputs[0].length]);
       const labelTensor = tf.tensor2d(labels, [labels.length, 1]);
   
       //Step 3. Normalize the data to the range 0 - 1 using min-max scaling
@@ -113,7 +117,14 @@ function convertToTensor(data) {
     const [xs, preds] = tf.tidy(() => {
       
       const xs = tf.linspace(0, 1, 100);
-      const preds = model.predict(xs.reshape([100,1]));      
+      
+      const ins1 = xs.arraySync();
+      const ins2 = ins1.concat(ins1);
+      //console.log(xs.dataSync())
+      //[xs.reshape([100, 1]), xs.reshape([100,1])]
+      const x2s = tf.tensor2d(ins2, [100,2])
+      //console.log(x2s.print())
+      const preds = model.predict(x2s);      
       
       const unNormXs = xs
         .mul(inputMax.sub(inputMin))
@@ -158,6 +169,13 @@ function convertToTensor(data) {
     }));
   
 
+    const weightvals = data.map(d => ({
+        x: d.weight,
+        y: d.mpg
+    }));
+
+    //console.log(data)
+
     tfvis.render.scatterplot(
         {name: 'Horsepower v MPG'},
         {values}, 
@@ -168,6 +186,16 @@ function convertToTensor(data) {
         }
       );
 
+      
+    tfvis.render.scatterplot(
+        {name: 'Weight v MPG'},
+        { values: weightvals }, 
+        {
+            xLabel: 'Weight',
+            yLabel: 'MPG',
+            height: 300
+        }
+    );
   
     // More code will be added below
     const model = createModel();  
